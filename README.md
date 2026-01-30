@@ -8,40 +8,38 @@ ShadowMesh demonstrates how to gradually migrate a legacy e-commerce monolith to
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│    ┌──────────┐         ┌─────────────┐         ┌──────────────┐           │
-│    │ Frontend │ ───────▶│   Gateway   │────────▶│  Monolith    │           │
-│    │  :5173   │         │   :8080     │    ┌───▶│   :3000      │           │
-│    └──────────┘         └─────────────┘    │    └──────┬───────┘           │
-│                               │            │           │                    │
-│                               │   Traffic  │    ┌──────▼───────┐           │
-│                               │   Weight   │    │ PostgreSQL   │           │
-│                               │            │    │   :5432      │           │
-│                               ▼            │    └──────┬───────┘           │
-│                        ┌─────────────┐     │           │                    │
-│                        │Microservice │◀────┘           │ CDC                │
-│                        │   :5001     │                 ▼                    │
-│                        └──────┬──────┘          ┌─────────────┐            │
-│                               │                 │  Debezium   │            │
-│                        ┌──────▼──────┐          │   :8083     │            │
-│                        │ PostgreSQL  │          └──────┬──────┘            │
-│                        │   :5433     │                 │                    │
-│                        └─────────────┘                 ▼                    │
-│                               ▲                 ┌─────────────┐            │
-│                               │                 │    Kafka    │            │
-│                        ┌──────┴──────┐          │   :9092     │            │
-│                        │  Consumer   │◀─────────┴─────────────┘            │
-│                        └─────────────┘                                      │
-│                                                                             │
-│    ┌─────────────┐                                                          │
-│    │  AI Agent   │ ──────── Autonomous health monitoring ─────────────────▶│
-│    │   :5050     │                                                          │
-│    └─────────────┘                                                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+### System Architecture Overview
+
+<p align="center">
+  <img src="./architecture.png" alt="ShadowMesh Architecture" width="850"/>
+</p>
+
+---
+
+### Main Website (E-commerce Platform)
+
+#### Shopping Area
+<p align="center">
+  <img src="./homepage.png" alt="Main Website – Shopping Area" width="750"/>
+</p>
+
+#### Admin Dashboard
+<p align="center">
+  <img src="./main_Admin1.png" alt="Admin Dashboard – View 1" width="700"/>
+</p>
+
+<p align="center">
+  <img src="./main_admin2.png" alt="Admin Dashboard – View 2" width="700"/>
+</p>
+
+---
+
+### AI Agent Dashboard (Autonomous Operations)
+
+<p align="center">
+  <img src="./ai_dashboard.png" alt="AI Agent Dashboard" width="800"/>
+</p>
+
 
 ## Tech Stack
 
@@ -157,7 +155,3 @@ shadowmesh/
 ├── docker-compose.yml # Container orchestration
 └── init.sql           # Database initialization
 ```
-
-## License
-
-MIT
