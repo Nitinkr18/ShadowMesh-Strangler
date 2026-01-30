@@ -1,0 +1,222 @@
+services:
+  monolith_db:
+    image: postgres:15
+    container_name: monolith_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: monolith_db
+    volumes:
+      - monolith_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    command: ["postgres", "-c", "wal_level=logical"]
+    networks:
+      - shadowmesh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  microservice_db:
+    image: postgres:15
+    container_name: microservice_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: microservice_db
+    volumes:
+      - microservice_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
+    networks:
+      - shadowmesh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - shadowmesh
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    networks:
+      - shadowmesh
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  connect:
+    image: debezium/connect:2.4
+    container_name: debezium_connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      monolith_db:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+    networks:
+      - shadowmesh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  monolith:
+    build: ./monolith
+    container_name: monolith
+    depends_on:
+      monolith_db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@monolith_db:5432/monolith_db
+      PORT: 3000
+      JWT_SECRET: shadowmesh_secret_key_2026
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - shadowmesh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  microservice:
+    build: ./microservice
+    container_name: microservice
+    depends_on:
+      microservice_db:
+        condition: service_healthy
+    ports:
+      - "5001:5000"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@microservice_db:5432/microservice_db
+      PORT: 5000
+    networks:
+      - shadowmesh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway:
+    build: ./gateway
+    container_name: gateway
+    depends_on:
+      - monolith
+      - microservice
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      MONOLITH_URL: http://monolith:3000
+      MICROSERVICE_URL: http://microservice:5000
+    networks:
+      - shadowmesh
+
+  consumer:
+    build: ./consumer
+    container_name: consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      microservice_db:
+        condition: service_healthy
+      connect:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: kafka:9092
+      DATABASE_URL: postgres://postgres:postgres@microservice_db:5432/microservice_db
+    networks:
+      - shadowmesh
+    restart: on-failure
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    depends_on:
+      - gateway
+    ports:
+      - "5173:5173"
+    networks:
+      - shadowmesh
+
+  ai_agent:
+    build: ./ai_agent
+    container_name: ai_agent
+    depends_on:
+      - gateway
+      - monolith
+      - connect
+      - microservice_db
+      - monolith_db
+    ports:
+      - "5050:5050"
+    environment:
+      MONOLITH_URL: http://monolith:3000
+      MONOLITH_DB_URL: postgres://postgres:postgres@monolith_db:5432/monolith_db
+      GATEWAY_URL: http://gateway:8080
+      DEBEZIUM_URL: http://connect:8083
+      MICROSERVICE_DB_URL: postgres://postgres:postgres@microservice_db:5432/microservice_db
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    networks:
+      - shadowmesh
+    restart: on-failure
+
+volumes:
+  monolith_data:
+  microservice_data:
+  uploads_data:
+
+networks:
+  shadowmesh:
+    driver: bridge

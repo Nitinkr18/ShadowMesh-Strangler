@@ -1,0 +1,18 @@
+{
+  "name": "monolith-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "monolith_db",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "monolith_db",
+    "database.server.name": "monolith",
+    "topic.prefix": "monolith",
+    "table.include.list": "public.products",
+    "plugin.name": "pgoutput",
+    "publication.autocreate.mode": "filtered",
+    "slot.name": "debezium_slot",
+    "snapshot.mode": "initial"
+  }
+}

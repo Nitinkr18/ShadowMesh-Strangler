@@ -1,0 +1,8 @@
+requests==2.31.0
+colorama==0.4.6
+psycopg2-binary==2.9.9
+langchain>=0.2.0
+langchain-groq>=0.1.0
+langchain-core>=0.2.0
+flask==3.0.0
+flask-cors==4.0.0
